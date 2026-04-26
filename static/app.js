@@ -894,17 +894,24 @@ class SuperBizAgentApp {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${type}${isStreaming ? ' streaming' : ''}`;
 
-        // 如果是assistant消息，添加头像图标
+        // 添加头像图标
+        const messageAvatar = document.createElement('div');
+        messageAvatar.className = 'message-avatar';
         if (type === 'assistant') {
-            const messageAvatar = document.createElement('div');
-            messageAvatar.className = 'message-avatar';
             messageAvatar.innerHTML = `
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="white"/>
+                <svg viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="currentColor"/>
                 </svg>
             `;
-            messageDiv.appendChild(messageAvatar);
+        } else {
+            messageAvatar.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="8" r="4" fill="currentColor"/>
+                    <path d="M20 21a8 8 0 00-16 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            `;
         }
+        messageDiv.appendChild(messageAvatar);
 
         // 创建消息内容包装器
         const messageContentWrapper = document.createElement('div');
@@ -1050,27 +1057,6 @@ class SuperBizAgentApp {
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
         notification.textContent = message;
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            border-radius: 8px;
-            color: white;
-            font-weight: 500;
-            z-index: 10000;
-            animation: slideIn 0.3s ease;
-            max-width: 300px;
-        `;
-
-        // 根据类型设置颜色（Google Material Design配色）
-        const colors = {
-            info: '#1a73e8',
-            success: '#34a853',
-            warning: '#fbbc04',
-            error: '#ea4335'
-        };
-        notification.style.backgroundColor = colors[type] || colors.info;
 
         // 添加到页面
         document.body.appendChild(notification);
@@ -1657,33 +1643,6 @@ class SuperBizAgentApp {
         }
     }
 }
-
-// 添加CSS动画
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    
-    @keyframes slideOut {
-        from {
-            transform: translateX(0);
-            opacity: 1;
-        }
-        to {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-    }
-`;
-document.head.appendChild(style);
 
 // 初始化应用
 document.addEventListener('DOMContentLoaded', () => {

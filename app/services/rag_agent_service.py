@@ -151,7 +151,7 @@ class RagAgentService:
                 logger.error(f"AsyncRedis Checkpointer setup 失败: {e}")
 
         # 2. 使用全局 MCP 客户端管理器（带重试拦截器）
-        mcp_client = await get_mcp_client_with_retry
+        mcp_client = await get_mcp_client_with_retry()
 
         # 获取 MCP 工具
         mcp_tools = await mcp_client.get_tools()
