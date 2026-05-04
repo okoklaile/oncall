@@ -20,6 +20,7 @@ from loguru import logger
 from app.agent.mcp_client import get_mcp_client_with_retry
 from app.config import config as app_config
 from app.tools import get_current_time, retrieve_knowledge, retrieve_past_diagnoses
+from app.services.context_compactor import compact
 
 from .state import PlanExecuteState
 
@@ -98,17 +99,20 @@ async def executor1(
             tool_calls = getattr(last_msg, "tool_calls", None)
             return "tools" if tool_calls else END
 
+        # 压缩节点: 每次工具调用后执行三层压缩 (复用 llm 作为摘要模型)
+        async def compact_node(internal_state: ExecutorInternalState) -> dict[str, Any]:
+            messages = list(internal_state["messages"])
+            compacted = await compact(messages, llm)
+            return {"messages": compacted}
+
         workflow = StateGraph(ExecutorInternalState)
         workflow.add_node("agent", agent_node)
         workflow.add_node("tools", ToolNode(all_tools))
+        workflow.add_node("compact", compact_node)
         workflow.set_entry_point("agent")
-        # add_conditional_edges(起点节点, 条件函数, 路由映射)
-        # 这里表示：从 agent 出发，执行 should_use_tools(state)。
-        # - 返回 "tools" => 跳转到 tools 节点执行工具
-        # - 返回 END     => 结束子图
-        # 这个映射里只有两个分支，因此没有“额外默认分支”。
         workflow.add_conditional_edges("agent", should_use_tools, {"tools": "tools", END: END})
-        workflow.add_edge("tools", "agent")
+        workflow.add_edge("tools", "compact")
+        workflow.add_edge("compact", "agent")
         
         # 编译子图，显式绑定传入的 checkpointer
         graph = workflow.compile(checkpointer=checkpointer)

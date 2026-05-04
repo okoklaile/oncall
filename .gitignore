@@ -61,6 +61,7 @@ volumes/
 # Uploads
 uploads/
 *.tmp
+.task_outputs/
 
 # OS
 .DS_Store
