@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from sse_starlette.sse import EventSourceResponse
 from loguru import logger
 
-from app.models.aiops import AIOpsRequest
+from app.models.aiops import AIOpsRequest, ConfirmDiagnosisRequest
 from app.services.aiops_service import aiops_service
 
 router = APIRouter()
@@ -151,3 +151,43 @@ async def diagnose_stream(request: AIOpsRequest):
             }
 
     return EventSourceResponse(event_generator())
+
+
+@router.post("/aiops/confirm")
+async def confirm_diagnosis(request: ConfirmDiagnosisRequest):
+    """运维确认诊断结果，修复成功则写入长期记忆。
+
+    Args:
+        request: 确认请求，含 session_id 和 confirmed 字段
+
+    Returns:
+        操作结果
+    """
+    try:
+        stored = await aiops_service.confirm_diagnosis(
+            session_id=request.session_id,
+            confirmed=request.confirmed,
+        )
+
+        if request.confirmed and stored:
+            return {
+                "code": 200,
+                "message": "诊断报告已写入长期记忆",
+                "data": {"session_id": request.session_id, "stored": True},
+            }
+        elif request.confirmed and not stored:
+            return {
+                "code": 200,
+                "message": "确认成功但入库失败（可能报告为空或会话不存在），详见日志",
+                "data": {"session_id": request.session_id, "stored": False},
+            }
+        else:
+            return {
+                "code": 200,
+                "message": "运维确认修复未成功，不写入长期记忆",
+                "data": {"session_id": request.session_id, "stored": False},
+            }
+
+    except Exception as e:
+        logger.error(f"确认诊断结果异常: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

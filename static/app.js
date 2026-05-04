@@ -1273,6 +1273,7 @@ class SuperBizAgentApp {
                                                     fullResponse += `\n\n${sseMessage.response}`;
                                                 }
                                                 this.updateAIOpsMessage(loadingMessageElement, fullResponse, []);
+                                                this.showAIOpsConfirmation(loadingMessageElement);
                                                 return true;
                                             } else if (sseMessage.type === 'done') {
                                                 console.log('AI Ops 流完成，最终内容长度:', fullResponse.length);
@@ -1344,6 +1345,8 @@ class SuperBizAgentApp {
                                             }
                                             // 使用最终的完整内容更新消息
                                             this.updateAIOpsMessage(loadingMessageElement, fullResponse, []);
+                                            // 显示确认按钮
+                                            this.showAIOpsConfirmation(loadingMessageElement);
                                             return;
                                         } else if (sseMessage.type === 'done') {
                                             console.log('AI Ops 流完成，最终内容长度:', fullResponse.length);
@@ -1614,6 +1617,75 @@ class SuperBizAgentApp {
             this.isStreaming = false;
             this.currentAIOpsMessage = null;
             this.updateUI();
+        }
+    }
+
+    // 显示 AIOps 确认按钮
+    showAIOpsConfirmation(messageElement) {
+        if (!messageElement) return;
+
+        const wrapper = messageElement.querySelector('.message-content-wrapper');
+        if (!wrapper) return;
+
+        // 避免重复添加
+        if (wrapper.querySelector('.aiops-confirm-bar')) return;
+
+        const confirmBar = document.createElement('div');
+        confirmBar.className = 'aiops-confirm-bar';
+        confirmBar.innerHTML = `
+            <div class="aiops-confirm-text">本次诊断是否成功解决了问题？</div>
+            <div class="aiops-confirm-buttons">
+                <button class="aiops-confirm-btn aiops-confirm-yes">修复成功，存入经验库</button>
+                <button class="aiops-confirm-btn aiops-confirm-no">未修复，不存入</button>
+            </div>
+        `;
+
+        const sessionId = this.sessionId;
+
+        confirmBar.querySelector('.aiops-confirm-yes').addEventListener('click', async () => {
+            await this.confirmAIOpsDiagnosis(sessionId, true, confirmBar);
+        });
+
+        confirmBar.querySelector('.aiops-confirm-no').addEventListener('click', async () => {
+            await this.confirmAIOpsDiagnosis(sessionId, false, confirmBar);
+        });
+
+        wrapper.appendChild(confirmBar);
+    }
+
+    // 调用后端确认接口
+    async confirmAIOpsDiagnosis(sessionId, confirmed, confirmBar) {
+        // 禁用按钮防止重复点击
+        const buttons = confirmBar.querySelectorAll('.aiops-confirm-btn');
+        buttons.forEach(b => b.disabled = true);
+
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/aiops/confirm`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: sessionId, confirmed: confirmed }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.code === 200) {
+                confirmBar.innerHTML = `
+                    <div class="aiops-confirm-result ${confirmed ? 'success' : 'info'}">
+                        ${confirmed ? '诊断报告已存入经验库' : '已确认，不存入经验库'}
+                    </div>
+                `;
+            } else {
+                confirmBar.innerHTML = `
+                    <div class="aiops-confirm-result error">
+                        操作失败: ${data.message || '请稍后重试'}
+                    </div>
+                `;
+            }
+        } catch (e) {
+            console.error('确认诊断结果失败:', e);
+            confirmBar.innerHTML = `
+                <div class="aiops-confirm-result error">网络错误，请稍后重试</div>
+            `;
         }
     }
 

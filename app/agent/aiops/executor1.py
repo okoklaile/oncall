@@ -19,7 +19,7 @@ from loguru import logger
 
 from app.agent.mcp_client import get_mcp_client_with_retry
 from app.config import config as app_config
-from app.tools import get_current_time, retrieve_knowledge
+from app.tools import get_current_time, retrieve_knowledge, retrieve_past_diagnoses
 
 from .state import PlanExecuteState
 
@@ -71,7 +71,7 @@ async def executor1(
 
     try:
         # 1) 组装工具：本地工具 + MCP 工具
-        local_tools = [get_current_time, retrieve_knowledge]
+        local_tools = [get_current_time, retrieve_knowledge, retrieve_past_diagnoses]
         mcp_client = await get_mcp_client_with_retry()
         mcp_tools = await mcp_client.get_tools()
         all_tools = local_tools + mcp_tools

@@ -8,6 +8,7 @@ from .planner import planner
 from .executor import executor
 from .executor1 import executor1
 from .replanner import replanner
+from .memory_store import store_aiops_memory
 
 __all__ = [
     "PlanExecuteState",
@@ -15,4 +16,5 @@ __all__ = [
     "executor",
     "executor1",
     "replanner",
+    "store_aiops_memory",
 ]

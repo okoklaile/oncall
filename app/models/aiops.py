@@ -22,6 +22,21 @@ class AIOpsRequest(BaseModel):
         }
 
 
+class ConfirmDiagnosisRequest(BaseModel):
+    """运维确认诊断结果请求"""
+
+    session_id: str = Field(..., description="诊断会话ID")
+    confirmed: bool = Field(..., description="是否确认修复成功")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "session-123",
+                "confirmed": True,
+            }
+        }
+
+
 class AlertInfo(BaseModel):
     """告警信息"""
     alertname: str

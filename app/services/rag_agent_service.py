@@ -31,7 +31,7 @@ from typing_extensions import TypedDict
 from langchain_qwq import ChatQwen
 
 from app.config import config
-from app.tools import get_current_time, retrieve_knowledge
+from app.tools import get_current_time, retrieve_knowledge, retrieve_past_diagnoses
 from app.agent.mcp_client import get_mcp_client_with_retry
 
 # 阿里千问大模型和langchain集成参考： https://docs.langchain.com/oss/python/integrations/chat/qwen
@@ -113,7 +113,7 @@ class RagAgentService:
         )
 
         # 定义基础工具
-        self.tools = [retrieve_knowledge, get_current_time]
+        self.tools = [retrieve_knowledge, get_current_time, retrieve_past_diagnoses]
 
         # MCP 客户端（延迟初始化，使用全局管理）
         self.mcp_tools: list = []
@@ -151,7 +151,7 @@ class RagAgentService:
                 logger.error(f"AsyncRedis Checkpointer setup 失败: {e}")
 
         # 2. 使用全局 MCP 客户端管理器（带重试拦截器）
-        mcp_client = await get_mcp_client_with_retry
+        mcp_client = await get_mcp_client_with_retry()
 
         # 获取 MCP 工具
         mcp_tools = await mcp_client.get_tools()

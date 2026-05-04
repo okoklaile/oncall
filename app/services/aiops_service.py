@@ -12,6 +12,7 @@ from loguru import logger
 
 from app.config import config
 from app.agent.aiops import PlanExecuteState, planner, executor1, replanner
+from app.agent.aiops.memory_store import store_aiops_memory
 
 
 # 节点名称常量
@@ -76,18 +77,15 @@ class AIOpsService:
         # replanner 的条件边
         def should_continue(state: PlanExecuteState) -> str:
             """判断是否继续执行"""
-            # 如果已经生成了最终响应，结束
             if state.get("response"):
                 logger.info("已生成最终响应，结束流程")
                 return END
 
-            # 如果还有计划步骤，继续执行
             plan = state.get("plan", [])
             if plan:
                 logger.info(f"继续执行，剩余 {len(plan)} 个步骤")
                 return NODE_EXECUTOR
 
-            # 计划为空但没有响应，返回 replanner 生成响应
             logger.info("计划执行完毕，生成最终响应")
             return END
 
@@ -297,6 +295,46 @@ class AIOpsService:
                 }
             else:
                 yield event
+
+    async def confirm_diagnosis(self, session_id: str, confirmed: bool) -> bool:
+        """运维确认诊断结果，成功则写入长期记忆。
+
+        Args:
+            session_id: 诊断会话ID
+            confirmed: 是否确认修复成功
+
+        Returns:
+            bool: 是否已入库
+        """
+        if not confirmed:
+            logger.info(f"[会话 {session_id}] 运维确认: 修复未成功，不入库")
+            return False
+
+        try:
+            await self._initialize_checkpointer()
+
+            config_dict = {"configurable": {"thread_id": session_id}}
+            final_state = await self.graph.aget_state(config_dict)
+
+            if not final_state or not final_state.values:
+                logger.warning(f"[会话 {session_id}] 未找到诊断状态，无法入库")
+                return False
+
+            response = final_state.values.get("response", "")
+            if not response:
+                logger.warning(f"[会话 {session_id}] 诊断报告为空，无法入库")
+                return False
+
+            await store_aiops_memory(
+                response=response,
+                input_text=final_state.values.get("input", ""),
+            )
+            logger.info(f"[会话 {session_id}] 运维确认修复成功，已写入长期记忆")
+            return True
+
+        except Exception:
+            logger.exception(f"[会话 {session_id}] 确认入库失败")
+            return False
 
     def _format_planner_event(self, state: Dict | None) -> Dict:
         """格式化 Planner 节点事件"""
