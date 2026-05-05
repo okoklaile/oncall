@@ -18,7 +18,7 @@ from typing_extensions import TypedDict
 from langchain_qwq import ChatQwen
 
 from app.config import config
-from app.tools import get_current_time, retrieve_knowledge, retrieve_past_diagnoses
+from app.tools import get_current_time, retrieve_knowledge, retrieve_past_diagnoses, read_task_output
 from app.agent.mcp_client import get_mcp_client_with_retry
 from app.services.context_compactor import compact
 
@@ -58,7 +58,7 @@ class RagAgentService:
         )
 
         # 本地工具
-        self.local_tools = [retrieve_knowledge, get_current_time, retrieve_past_diagnoses]
+        self.local_tools = [retrieve_knowledge, get_current_time, retrieve_past_diagnoses, read_task_output]
         self.mcp_tools: list = []
 
         # Checkpointer

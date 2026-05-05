@@ -19,7 +19,7 @@ from loguru import logger
 # ============================================================
 
 PERSIST_THRESHOLD = 8000        # 字符, 工具输出超过此值触发落盘 (~2000 tokens)
-MICRO_KEEP_LAST = 3             # 微压缩保留最近 N 个工具结果原文
+MICRO_KEEP_LAST = 5             # 微压缩保留最近 N 个工具结果原文
 CONTEXT_CHAR_LIMIT = 48000      # 字符, 整体上下文超过此值触发摘要 (~12000 tokens, 按 1token≈4char)
 
 
@@ -61,6 +61,10 @@ def persist_large_outputs(messages: list[BaseMessage]) -> list[BaseMessage]:
 
     for i, msg in enumerate(messages):
         if not isinstance(msg, ToolMessage):
+            continue
+        # 豁免: read_task_output 的结果本身就是从磁盘读的，不应二次落盘
+        name = getattr(msg, "name", "")
+        if name == "read_task_output":
             continue
         content = msg.content if isinstance(msg.content, str) else str(msg.content)
         if len(content) <= PERSIST_THRESHOLD:
