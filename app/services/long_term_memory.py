@@ -47,6 +47,20 @@ def _ensure_db() -> None:
                 created_at      TEXT NOT NULL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_history (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id      TEXT NOT NULL,
+                seq             INTEGER NOT NULL DEFAULT 0,
+                role            TEXT NOT NULL,
+                content         TEXT NOT NULL,
+                created_at      TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_conv_session
+            ON conversation_history(session_id, seq)
+        """)
         conn.commit()
 
 
@@ -215,3 +229,80 @@ def search_chat(keyword: str = "", limit: int = 5) -> list[dict]:
     except Exception:
         logger.exception("Chat 记忆: 搜索失败")
         return []
+
+
+# ============================================================
+# 对话历史
+# ============================================================
+
+def save_conversation_message(session_id: str, role: str, content: str) -> None:
+    """保存一条对话消息。
+
+    Args:
+        session_id: 会话 ID
+        role: user 或 assistant
+        content: 消息正文
+    """
+    try:
+        with _conn() as conn:
+            max_seq = conn.execute(
+                "SELECT COALESCE(MAX(seq), -1) FROM conversation_history WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()[0]
+            conn.execute(
+                "INSERT INTO conversation_history (session_id, seq, role, content, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (session_id, max_seq + 1, role, content, _now()),
+            )
+            conn.commit()
+    except Exception:
+        logger.exception(f"保存对话消息失败: session={session_id}")
+
+
+def get_conversation_history(session_id: str) -> list[dict]:
+    """获取会话的对话历史。
+
+    Args:
+        session_id: 会话 ID
+
+    Returns:
+        [{"role": "user|assistant", "content": "...", "timestamp": "..."}]
+    """
+    try:
+        with _conn() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT role, content, created_at FROM conversation_history "
+                "WHERE session_id = ? ORDER BY seq",
+                (session_id,),
+            ).fetchall()
+            return [
+                {"role": r["role"], "content": r["content"], "timestamp": r["created_at"]}
+                for r in rows
+            ]
+    except Exception:
+        logger.exception(f"获取对话历史失败: {session_id}")
+        return []
+
+
+def clear_conversation_history(session_id: str) -> bool:
+    """清空会话的对话历史。
+
+    Args:
+        session_id: 会话 ID
+
+    Returns:
+        是否成功
+    """
+    try:
+        with _conn() as conn:
+            conn.execute(
+                "DELETE FROM conversation_history WHERE session_id = ?",
+                (session_id,),
+            )
+            conn.commit()
+            logger.info(f"已清空对话历史: {session_id}")
+            return True
+    except Exception:
+        logger.exception(f"清空对话历史失败: {session_id}")
+        return False

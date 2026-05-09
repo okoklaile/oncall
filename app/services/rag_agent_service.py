@@ -21,6 +21,11 @@ from app.config import config
 from app.tools import get_current_time, retrieve_knowledge, retrieve_past_diagnoses, read_task_output
 from app.agent.mcp_client import get_mcp_client_with_retry
 from app.services.context_compactor import compact
+from app.services.long_term_memory import (
+    save_conversation_message,
+    get_conversation_history,
+    clear_conversation_history,
+)
 
 
 # ============================================================
@@ -182,6 +187,7 @@ class RagAgentService:
                 logger.info(f"[会话 {session_id}] 恢复会话, 历史 {len(history)} 条")
 
             messages.append(HumanMessage(content=question))
+            save_conversation_message(session_id, "user", question)
             config_dict: RunnableConfig = {"configurable": {"thread_id": session_id}}
 
             result = await self.graph.ainvoke({"messages": messages}, config=config_dict)
@@ -209,6 +215,8 @@ class RagAgentService:
             if not answer and messages_result:
                 answer = str(messages_result[-1])
 
+            if answer:
+                save_conversation_message(session_id, "assistant", answer)
             logger.info(f"[会话 {session_id}] 查询完成, 回答长度={len(answer)}")
             return answer
 
@@ -235,8 +243,10 @@ class RagAgentService:
                 logger.info(f"[会话 {session_id}] 恢复会话(流式), 历史 {len(history)} 条")
 
             messages.append(HumanMessage(content=question))
+            save_conversation_message(session_id, "user", question)
             config_dict: RunnableConfig = {"configurable": {"thread_id": session_id}}
 
+            full_answer = ""
             async for msg, meta in self.graph.astream(
                 {"messages": messages},
                 config=config_dict,
@@ -248,8 +258,11 @@ class RagAgentService:
                         if isinstance(block, dict) and block.get("type") == "text":
                             text = block.get("text", "")
                             if text:
+                                full_answer += text
                                 yield {"type": "content", "data": text, "node": node}
 
+            if full_answer:
+                save_conversation_message(session_id, "assistant", full_answer)
             yield {"type": "complete"}
 
         except Exception as e:
@@ -262,29 +275,16 @@ class RagAgentService:
     # ============================================================
 
     async def get_session_history(self, session_id: str) -> list:
+        """从 SQLite conversation_history 表读取对话历史。"""
         try:
-            await self._ensure_graph()
-            state = await self.graph.aget_state({"configurable": {"thread_id": session_id}})
-            if not state or not state.values or "messages" not in state.values:
-                return []
-
-            history: list[dict] = []
-            for msg in state.values["messages"]:
-                if isinstance(msg, SystemMessage):
-                    continue
-                role = "user" if isinstance(msg, HumanMessage) else "assistant"
-                content = msg.content if hasattr(msg, "content") else str(msg)
-                history.append({
-                    "role": role,
-                    "content": content,
-                    "timestamp": msg.additional_kwargs.get("timestamp", ""),
-                })
-            return history
+            return get_conversation_history(session_id)
         except Exception as e:
             logger.error(f"获取会话历史失败: {session_id}, {e}")
             return []
 
     def clear_session(self, session_id: str) -> bool:
+        """清空会话历史（SQLite + Redis checkpoint）。"""
+        ok = clear_conversation_history(session_id)
         try:
             import redis
             sync_redis = redis.from_url(config.redis_url, decode_responses=True)
@@ -292,11 +292,9 @@ class RagAgentService:
             keys = sync_redis.keys(pattern)
             if keys:
                 sync_redis.delete(*keys)
-            logger.info(f"已清除会话: {session_id}, 删除 {len(keys)} 个键")
-            return True
         except Exception as e:
-            logger.error(f"清空会话失败: {session_id}, {e}")
-            return False
+            logger.error(f"清除 Redis checkpoint 失败: {session_id}, {e}")
+        return ok
 
     async def cleanup(self):
         logger.info("RAG Agent 资源已清理")
